@@ -773,10 +773,13 @@ export class OpusRtpAudioReceiver {
 
   #advancePlayout(samples: number): void {
     const interval = (samples * 1_000) / WEBRTC_AUDIO_SAMPLE_RATE
-    this.#nextPlayoutAt = Math.max(
-      this.#nextPlayoutAt + interval,
-      this.#scheduler.now() + interval,
-    )
+    const previousDeadline = this.#nextPlayoutAt
+    const now = this.#scheduler.now()
+    // Ordinary jitter/callback cost must not change the media cadence. A delay
+    // of at least two frames retains the old stall recovery: wait one interval
+    // after processing, rather than bursting through the buffered audio.
+    const stallRecovery = now - previousDeadline >= 2 * interval
+    this.#nextPlayoutAt = stallRecovery ? now + interval : previousDeadline + interval
     this.#schedule()
   }
 
